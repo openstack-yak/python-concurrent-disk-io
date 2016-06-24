@@ -14,11 +14,16 @@
 #include <netinet/in.h>
 
 
+typedef struct _ThreadRequest {
+    int client_socket;
+    long receipt_timestamp;
+    pthread_t thread;
+} ThreadRequest;
+
 typedef struct _ReadResponse {
     int rc;
     int bytes_read;
     long elapsed_time_ms;
-    char file_path[256];
 } ReadResponse;
 
 
@@ -26,10 +31,10 @@ static const int NUM_WORKER_THREADS = 5;
 
 static const int READ_TIMEOUT_SECS = 4;
 
-// status codes to indicate whether read succeeded, timed out, or failed
-static const int STATUS_READ_SUCCESS = 0;
-static const int STATUS_READ_TIMEOUT = 1;
-static const int STATUS_READ_IO_FAIL = 2;
+static const int STATUS_READ_SUCCESS  = 0;
+static const int STATUS_READ_TIMEOUT  = 1;
+static const int STATUS_READ_IO_FAIL  = 2;
+static const int STATUS_QUEUE_TIMEOUT = 3;
 
 // percentage of requests that result in very long response times (many seconds)
 static const double PCT_LONG_IO_RESPONSE_TIMES = 0.10;
@@ -55,6 +60,12 @@ static const double MAX_TIME_FOR_NORMAL_IO = 0.4;
 // maximum ADDITIONAL time above timeout experienced by requests that time out
 static double MAX_TIME_ABOVE_TIMEOUT;
 
+
+long current_time_millis() {
+    struct timespec spec;
+    clock_gettime(CLOCK_REALTIME, &spec);
+    return round(spec.tv_nsec / 1.0e6);
+}
 
 double random_value() {
     return rand() / (double) (RAND_MAX);
@@ -139,10 +150,9 @@ void simulated_file_read(const char* file_path,
     read_response->rc = rc;
     read_response->bytes_read = num_bytes_read;
     read_response->elapsed_time_ms = elapsed_time_ms;
-    strncpy(read_response->file_path, file_path, 255);
 }
 
-void handle_socket_request(int sock) {
+void handle_socket_request(ThreadRequest* thread_request) {
     ReadResponse read_resp;
     char request_text[256];
     const char* file_path;
@@ -151,7 +161,9 @@ void handle_socket_request(int sock) {
     memset(request_text, 0, 256);
 
     // read request from client
-    const int rc = read(sock, request_text, 256);
+    const int rc = read(thread_request->client_socket,
+                        request_text,
+                        256);
 
     // read from socket succeeded?
     if (rc > 0) {
@@ -162,6 +174,12 @@ void handle_socket_request(int sock) {
             if (request_text[len_req_payload-1] == '\n') {
                 request_text[len_req_payload-1] = '\0';
             }
+
+            // determine how long the request has waited in queue
+            const long start_processing_timestamp = current_time_millis();
+            const long queue_time_ms =
+                start_processing_timestamp - thread_request->receipt_timestamp;
+            const int queue_time_secs = queue_time_ms / 1000;
 
             // unless otherwise specified, let server generate
             // the response time
@@ -187,31 +205,46 @@ void handle_socket_request(int sock) {
 
             memset(&read_resp, 0, sizeof(read_resp));
 
-            // *********  perform simulated read of disk file  *********            
-            simulated_file_read(file_path,
-                                predetermined_response_time_ms,
-                                READ_TIMEOUT_SECS,
-                                &read_resp);
+            // has this request already timed out?
+            if (queue_time_secs >= READ_TIMEOUT_SECS) {
+                printf("timeout (queue)\n");
+                read_resp.rc = STATUS_QUEUE_TIMEOUT;
+                read_resp.bytes_read = 0;
+                read_resp.elapsed_time_ms = 0;
+            } else {
+                // *********  perform simulated read of disk file  *********
+                simulated_file_read(file_path,
+                                    predetermined_response_time_ms,
+                                    READ_TIMEOUT_SECS,
+                                    &read_resp);
+            }
+
+            // total request time is sum of time spent in queue and the
+            // simulated disk read time
+            const long tot_request_time_ms =
+                queue_time_ms + read_resp.elapsed_time_ms;
 
             // create response text
             snprintf(response_text, 255, "%d,%d,%ld,%s\n",
                      read_resp.rc,
                      read_resp.bytes_read,
-                     read_resp.elapsed_time_ms,
-                     read_resp.file_path);
+                     tot_request_time_ms,
+                     file_path);
 
             // return response text to client
-            write(sock, response_text, strlen(response_text));
+            write(thread_request->client_socket,
+                  response_text,
+                  strlen(response_text));
         }
     }
 
     // close client socket connection
-    close(sock);
+    close(thread_request->client_socket);
+    free(thread_request);
 }
 
 void* thread_handle_socket_request(void* thread_arg) {
-    const int sock = (int) thread_arg;
-    handle_socket_request(sock);
+    handle_socket_request((ThreadRequest*)thread_arg);
     return NULL;
 }
 
@@ -259,11 +292,13 @@ int main(int argc, char* argv[]) {
             // create a new thread. for something real, a thread
             // pool would be used, but creating a new thread for
             // each request should be fine for our purposes.
-            pthread_t worker_thread;
-            pthread_create(&worker_thread,
+            ThreadRequest* thread_request = malloc(sizeof(ThreadRequest));
+            thread_request->receipt_timestamp = current_time_millis();
+            thread_request->client_socket = sock;
+            pthread_create(&thread_request->thread,
                            NULL,
                            thread_handle_socket_request,
-                           (void*)sock);
+                           (void*)thread_request);
         }
     }
     return 0;
