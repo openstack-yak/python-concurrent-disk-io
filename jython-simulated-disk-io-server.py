@@ -1,13 +1,12 @@
-# python - simulate occasional problematic (long blocking) requests within eventlet
-# language version: 2.7
+# jython - simulate occasional problematic (long blocking) requests
+# to run: jython jython-simulated-disk-io-server.py
 
-import eventlet
-from eventlet.green import socket
+
 import string
 import time
+import socket
+from threading import Thread
 
-
-NUM_GREEN_THREADS = 5
 
 READ_TIMEOUT_SECS = 4
 
@@ -71,7 +70,7 @@ def main(server_port):
         while True:
             sock, addr = server_socket.accept()
             receipt_timestamp = time.time()
-            eventlet.spawn(handle_socket_request, sock, receipt_timestamp)
+            Thread(target=lambda: handle_socket_request(sock, receipt_timestamp)).start()
     except KeyboardInterrupt:
         pass  # exit
 
