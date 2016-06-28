@@ -100,6 +100,7 @@ def handle_socket_request(sock):
     # curio.socket.makefile() only can be made in binary mode:
     reader = sock.makefile('b')
     writer = sock.makefile('b')
+## TODO:
     file_path = reader.readline()
     if file_path:
         read_resp = simulated_file_read(file_path, READ_TIMEOUT)
