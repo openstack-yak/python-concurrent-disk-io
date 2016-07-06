@@ -1,5 +1,6 @@
-# python - simulate occasional problematic (long blocking) requests within eventlet
-# language version: 2.7
+# python - simulate occasional problematic (long blocking) requests within curio
+# python version: 3.5
+# curio version: 0.4
 
 from curio import run, spawn
 from curio.socket import *
