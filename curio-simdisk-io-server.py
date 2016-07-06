@@ -1,129 +1,85 @@
-# simulate occasional problematic (long blocking) requests within eventlet
+# python - simulate occasional problematic (long blocking) requests within eventlet
+# language version: 2.7
 
 from curio import run, spawn
 from curio.socket import *
-import random
+import string
 import time
 
 
 NUM_GREEN_THREADS = 5
 
-READ_TIMEOUT = 4
+READ_TIMEOUT_SECS = 4
 
-# status codes to indicate whether read succeeded, timed out, or failed
-READ_SUCCESS = 0
-READ_TIMEOUT = 1
-READ_IO_FAIL = 2
-
-# percentage of requests that result in very long response times (many seconds)
-PCT_LONG_IO_RESPONSE_TIMES = 0.10
-
-# percentage of requests that result in IO failure
-PCT_IO_FAIL = 0.001
-
-# max size that would be read
-MAX_READ_BYTES = 100000
-
-# min/max values for io failure
-MIN_TIME_FOR_IO_FAIL = 0.3
-MAX_TIME_FOR_IO_FAIL = 3.0
-
-# min/max values for slow read (dying disk)
-MIN_TIME_FOR_SLOW_IO = 6.0
-MAX_TIME_FOR_SLOW_IO = 20.0
-
-# min/max values for normal io
-MIN_TIME_FOR_NORMAL_IO = 0.075
-MAX_TIME_FOR_NORMAL_IO = 0.4
-
-# maximum ADDITIONAL time above timeout experienced by requests that time out
-MAX_TIME_ABOVE_TIMEOUT = MAX_TIME_FOR_SLOW_IO * 0.8
+STATUS_OK = 0
+STATUS_QUEUE_TIMEOUT = 1
+STATUS_BAD_INPUT = 2
 
 
-def random_value_between(min_value,max_value):
-    rand_value = random.random() * max_value
-    if rand_value < min_value:
-        rand_value = min_value
-    return rand_value
+def simulated_file_read(elapsed_time_ms):
+    time.sleep(elapsed_time_ms / 1000.0)  # seconds
 
 
-def simulated_file_read(file_path, read_timeout):
-    start_time = time.time()
-    num_bytes_read = 0
-    rand_number = random.random()
-    request_with_slow_read = False
+async def client_request(client, addr, receipt_timestamp):
+    #reader = client.makefile('r')
+    #writer = client.makefile('w')
+    #request_text = reader.readline()
+    s = client.as_stream()
+    request_text = await s.readline()
+    if request_text:
+        start_processing_timestamp = time.time()
+        queue_time_ms = start_processing_timestamp - receipt_timestamp
+        queue_time_secs = queue_time_ms / 1000
 
-    if rand_number <= PCT_IO_FAIL:
-        # simulate read io failure
-        rc = READ_IO_FAIL
-        elapsed_time = random_value_between(MIN_TIME_FOR_IO_FAIL, MAX_TIME_FOR_IO_FAIL)
-    else:
-        rc = READ_SUCCESS
-        if rand_number <= PCT_LONG_IO_RESPONSE_TIMES:
-            # simulate very slow request
-            request_with_slow_read = True
-            elapsed_time = random_value_between(MIN_TIME_FOR_SLOW_IO, MAX_TIME_FOR_SLOW_IO)
+        rc = STATUS_OK
+        disk_read_time_ms = 0
+        file_path = ''
+
+        # has this request already timed out?
+        if queue_time_secs >= READ_TIMEOUT_SECS:
+            print("timeout (queue)")
+            rc = STATUS_QUEUE_TIMEOUT
         else:
-            # simulate typical read response time
-            elapsed_time = random_value_between(MIN_TIME_FOR_NORMAL_IO, MAX_TIME_FOR_NORMAL_IO)
-        num_bytes_read = int(random.random() * MAX_READ_BYTES)
+            fields = request_text.split(b',')
+            if len(fields) == 3:
+                rc = int(fields[0])
+                disk_read_time_ms = int(fields[1])
+                file_path = fields[2]
+                simulated_file_read(disk_read_time_ms)
+            else:
+                rc = STATUS_BAD_INPUT
 
-    if elapsed_time > read_timeout and not request_with_slow_read:
-        rc = READ_TIMEOUT
-        elapsed_time = random_value_between(0, MAX_TIME_ABOVE_TIMEOUT)
-        num_bytes_read = 0
+        # total request time is sum of time spent in queue and the
+        # simulated disk read time
+        tot_request_time_ms = queue_time_ms + disk_read_time_ms
 
-    time.sleep(elapsed_time)
-
-    end_time = time.time()
-
-    if rc == READ_TIMEOUT:
-        print("timeout (assigned)")
-    elif rc == READ_IO_FAIL:
-        print("io fail")
-    elif rc == READ_SUCCESS:
-        # what would otherwise have been a successful read turns into a
-        # timeout error if simulated execution time exceeds timeout value
-        exec_time = end_time - start_time
-        if exec_time > read_timeout:
-            #TODO: it would be nice to increment a counter here and show
-            # the counter value as part of print
-            print("timeout (service)")
-            rc = READ_TIMEOUT
-            num_bytes_read = 0
-            elapsed_time = exec_time
-
-    return (rc, num_bytes_read, elapsed_time)
+        # construct response and send back to client
+        read_resp_text = b"%d,%d,%s" % \
+            (rc, tot_request_time_ms, file_path)
+        await s.write(read_resp_text)
+        # writer.flush()
+    # reader.close()
+    # writer.close()
+    # client.close()
 
 
-def handle_socket_request(sock):
-    # curio.socket.makefile() only can be made in binary mode:
-    reader = sock.makefile('b')
-    writer = sock.makefile('b')
-## TODO:
-    file_path = reader.readline()
-    if file_path:
-        read_resp = simulated_file_read(file_path, READ_TIMEOUT)
-        read_resp_text = "%d,%d,%f,%s" % (read_resp[0], read_resp[1], read_resp[2], file_path)
-        writer.write(read_resp_text+'\n')
-        writer.flush()
-    reader.close()
-    writer.close()
-    sock.close()
-
-
-def main(server_port):
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('', server_port))
-    server_socket.listen(100)
+async def main(server_port):
+    sock = socket(AF_INET, SOCK_STREAM)
+    sock.bind(('', server_port))
+    sock.listen(100)
     print("server listening on port %d" % server_port)
 
-    while True:
-        sock, addr = server_socket.accept()
-        eventlet.spawn(handle_socket_request, sock)
+    # TODO: move this interrupt handling into client
+    try:
+        while True:
+            client, addr = await sock.accept()
+            receipt_timestamp = time.time()
+            await spawn(client_request(client, addr, receipt_timestamp))
+    except KeyboardInterrupt:
+        pass  # exit
 
 
 if __name__=='__main__':
-    server_port = 6000
-    main(server_port)
+    server_port = 7000
+    run(main(server_port))
 
