@@ -120,6 +120,7 @@ Implementations
 | jython-simulated-disk-io-server.py | Python (JVM)  | N        | Jython 2.7.0 |
 | simulated-disk-io-server.c         | C             | N        | gcc 4.8.5 |
 | simulated-disk-io-server.go        | Go            | N        | go version go1.2.1 linux/amd64 |
-| simulated-disk-io-server.py        | Python        | **Y**    | CPython 2.7 and eventlet |
+| simulated-disk-io-server.py        | Python 2.7    | **Y**    | CPython 2.7 and eventlet |
+| curio-simdisk-io-server.py         | Python 3.5    | **Y**    | CPython 3.5 and curio |
 | simulated-disk-io-server.rs        | Rust          | N        | Rust 1.9 |
 
