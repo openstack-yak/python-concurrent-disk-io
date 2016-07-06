@@ -7,8 +7,6 @@ import string
 import time
 
 
-NUM_GREEN_THREADS = 5
-
 READ_TIMEOUT_SECS = 4
 
 STATUS_OK = 0
@@ -21,9 +19,6 @@ def simulated_file_read(elapsed_time_ms):
 
 
 async def client_request(client, addr, receipt_timestamp):
-    #reader = client.makefile('r')
-    #writer = client.makefile('w')
-    #request_text = reader.readline()
     s = client.as_stream()
     request_text = await s.readline()
     if request_text:
@@ -57,10 +52,6 @@ async def client_request(client, addr, receipt_timestamp):
         read_resp_text = b"%d,%d,%s" % \
             (rc, tot_request_time_ms, file_path)
         await s.write(read_resp_text)
-        # writer.flush()
-    # reader.close()
-    # writer.close()
-    # client.close()
 
 
 async def main(server_port):
