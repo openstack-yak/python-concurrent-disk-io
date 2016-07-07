@@ -2,6 +2,10 @@
 
 Quickstart
 ----------
+For python tests, make a virtualenv with the appropriate python
+(python2 for all but the curio tests;  python3.5+ for the curio test).
+Use the appropriate requirements file.
+
 Start up an eventlet-based server that simulates disk io:
 
     python simulated-disk-io-server.py
