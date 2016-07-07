@@ -2,7 +2,7 @@
 # python version: 3.5
 # curio version: 0.4
 
-from curio import run, spawn
+from curio import run, spawn, run_in_thread
 from curio.socket import *
 import string
 import time
@@ -14,8 +14,10 @@ STATUS_OK = 0
 STATUS_QUEUE_TIMEOUT = 1
 STATUS_BAD_INPUT = 2
 
-
+#  Since disk I/O will not in general be async, do not use curio.sleep;
+#   do not async this simulation;  rather run it in a thread;
 def simulated_file_read(elapsed_time_ms):
+    # do not use curio.sleep(elapsed_time_ms / 1000.0)  # seconds
     time.sleep(elapsed_time_ms / 1000.0)  # seconds
 
 
@@ -33,7 +35,7 @@ async def client_request(client, addr, receipt_timestamp):
 
         # has this request already timed out?
         if queue_time_secs >= READ_TIMEOUT_SECS:
-            print("timeout (queue)")
+            # print("timeout (queue)")
             rc = STATUS_QUEUE_TIMEOUT
         else:
             fields = request_text.split(b',')
@@ -41,7 +43,8 @@ async def client_request(client, addr, receipt_timestamp):
                 rc = int(fields[0])
                 disk_read_time_ms = int(fields[1])
                 file_path = fields[2]
-                simulated_file_read(disk_read_time_ms)
+                # real disk I/O will be blocking; run in a thread:
+                await run_in_thread(simulated_file_read, disk_read_time_ms)
             else:
                 rc = STATUS_BAD_INPUT
 
@@ -65,13 +68,12 @@ async def main(server_port):
     try:
         while True:
             client, addr = await sock.accept()
-            receipt_timestamp = time.time()
-            await spawn(client_request(client, addr, receipt_timestamp))
+            await spawn(client_request(client, addr, time.time()))
     except KeyboardInterrupt:
         pass  # exit
 
 
 if __name__=='__main__':
     server_port = 7000
-    run(main(server_port))
+    run(main(server_port), with_monitor=True)
 
