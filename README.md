@@ -6,9 +6,11 @@ Start up an eventlet-based server that simulates disk io:
 
     python simulated-disk-io-server.py
 
-Then, fire up several terminals and in each one run:
+Then, fire up several requests:
 
-    ./make_requests.py
+    $ for i in {1..10}; do
+        ./make_requests.py&
+      done
 
 (that's a candidate for rewriting in Python-3/curio)
 
@@ -50,12 +52,32 @@ simulate the long blocking call.
 -------------------
 "Just use async IO" is probably the most common suggested solution
 to the problem at hand. Unfortunately, it doesn't solve the problem.
-The problem is when the read or write operation starts and it then
-hangs. The standard Python implementation uses green threads and
-also contains a Global Interpreter Lock (GIL) that severely limits
-parallelism. The presence of green threads and the GIL makes the
-problem much worse than would ordinarily be the case -- ALL requests
-become blocked on the problematic IO request.
+The problem is that file I/O operations are blocking.
+The favored standard Python implementation uses green threads,
+while other languages (explicitly or implicitly) affect non-blocking
+file I/O (either through threads, or otherwise).
+The commonly held nothion that this is due to Python's
+Global Interpreter Lock (GIL) is a misnomer - any blocking
+operation on cooperatively scheduled asynchronous coroutines will
+block, regardless of the language.
+Green threads implement effectively what Python 3.5+ async/await
+accomplishes, and it is up the the programmer to choose the appropriate
+cooperative asynchronous models at the right points.
+The correct programming paradigm is to always put I/O in asynchronous
+coroutines, and thus avoid blocking.
+Unfortunately, physical devices, like disk drives, do not cooperate
+well in this model (unpredictably slow - even more so when intermittent
+failures appear), and thus doing operations on physical devices
+appropriately should be done in a separate thread, so as to ensure
+a consistent cooperative multitasking environment.
+This becomes clearly obvious when looking at the jython implementation,
+where greenlets (which are compiled code - not python native) are
+not available, and the other option is a full on threading model.
+While the point of threading there masks the specific point of failure,
+it is a good hint.
+Following a disciplined paradigm for cooperative multiprocessing,
+and thus using async, leads to a solution for the blocked, problematic IO requests.
+
 
 The Problem is Not Python
 -------------------------
@@ -65,13 +87,14 @@ would be incorrect. The test performed using **Jython** (Python
 implemented on the Java Virtual Machine) did not experience the same
 problems encountered by CPython. Therefore, it's not a defect in the
 language definition. The problems experienced with CPython appear to
-be based on the **implementation**.
+be based on the **implementation** *of the solution code*.
 
 Intent
 ------
-The **intent** of this project is **NOT** to give any opinions or
-recommendations, but rather to take an objective look at the
-problem and explore various alternatives.
+The **intent** of this project is 
+to take an objective look at the
+problem and fully understand the nature of the problem.
+A solution may or may not come naturally as part of this process.
 
 Baseline
 --------
@@ -98,9 +121,8 @@ The client utility used for testing is 'make_requests.py'.
 The Test
 --------
 1. Start the server implementation
-2. Open multiple shell sessions (about 4 or 5)
-3. In each shell session, run 'python make_requests.py' so that
-all 4 or 5 shell sessions are running concurrently
+2. Run multiple request processes (at least 4 or 5)
+3. run 'python make_requests.py&', ensuring the shell sessions are running concurrently
 
 If the client requests experience timeout, then the problem scenario
 has manifested itself. If none of the concurrent client requests are
@@ -120,7 +142,8 @@ Implementations
 | jython-simulated-disk-io-server.py | Python (JVM)  | N        | Jython 2.7.0 |
 | simulated-disk-io-server.c         | C             | N        | gcc 4.8.5 |
 | simulated-disk-io-server.go        | Go            | N        | go version go1.2.1 linux/amd64 |
-| simulated-disk-io-server.py        | Python 2.7    | **Y**    | CPython 2.7 and eventlet |
 | curio-simdisk-io-server.py         | Python 3.5    | N        | CPython 3.5 and curio |
+| simulated-disk-io-server.py        | Python 2.7    | **Y**    | CPython 2.7 and eventlet |
+| threaded-simulated-disk-io-server.py        | Python 2.7    | N    | CPython 2.7 and eventlet; corrected to use threaded disk I/O |
 | simulated-disk-io-server.rs        | Rust          | N        | Rust 1.9 |
 
