@@ -52,47 +52,6 @@ on this topic is to use a 'sleep' call to mimic the blocking call.
 This is what each of the implementations presented here does to
 simulate the long blocking call.
 
-"Just Use Async IO"
--------------------
-"Just use async IO" is probably the most common suggested solution
-to the problem at hand. Unfortunately, it doesn't solve the problem.
-The problem is that file I/O operations are blocking.
-The favored standard Python implementation uses green threads,
-while other languages (explicitly or implicitly) affect non-blocking
-file I/O (either through threads, or otherwise).
-The commonly held nothion that this is due to Python's
-Global Interpreter Lock (GIL) is a misnomer - any blocking
-operation on cooperatively scheduled asynchronous coroutines will
-block, regardless of the language.
-Green threads implement effectively what Python 3.5+ async/await
-accomplishes, and it is up the the programmer to choose the appropriate
-cooperative asynchronous models at the right points.
-The correct programming paradigm is to always put I/O in asynchronous
-coroutines, and thus avoid blocking.
-Unfortunately, physical devices, like disk drives, do not cooperate
-well in this model (unpredictably slow - even more so when intermittent
-failures appear), and thus doing operations on physical devices
-appropriately should be done in a separate thread, so as to ensure
-a consistent cooperative multitasking environment.
-This becomes clearly obvious when looking at the jython implementation,
-where greenlets (which are compiled code - not python native) are
-not available, and the other option is a full on threading model.
-While the point of threading there masks the specific point of failure,
-it is a good hint.
-Following a disciplined paradigm for cooperative multiprocessing,
-and thus using async, leads to a solution for the blocked, problematic IO requests.
-
-
-The Problem is Not Python
--------------------------
-It would be easy to pin the problem on Python (the language) and
-conclude that the language is fundamentally flawed. Such a conclusion
-would be incorrect. The test performed using **Jython** (Python
-implemented on the Java Virtual Machine) did not experience the same
-problems encountered by CPython. Therefore, it's not a defect in the
-language definition. The problems experienced with CPython appear to
-be based on the **implementation** *of the solution code*.
-
 Intent
 ------
 The **intent** of this project is 
@@ -103,7 +62,7 @@ A solution may or may not come naturally as part of this process.
 Baseline
 --------
 The baseline (reference) for this project is the **eventlet-based
-CPython** implementation (simulated-disk-io-server.py).
+CPython** implementation (eventlet-simulated-disk-io-server.py).
 
 Alternatives Explored
 ---------------------
