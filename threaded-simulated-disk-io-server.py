@@ -1,10 +1,10 @@
-# python threads - simulate occasional problematic (long blocking) requests
-# to run: python threaded-simulated-disk-io-server.py
+# python - simulate occasional problematic (long blocking) requests within eventlet
+# language version: 2.7
 
-
+import eventlet
+from eventlet.green import socket
 import string
 import time
-import socket
 from threading import Thread
 
 
@@ -42,7 +42,8 @@ def handle_socket_request(sock, receipt_timestamp):
                 rc = int(fields[0])
                 disk_read_time_ms = long(fields[1])
                 file_path = fields[2]
-                simulated_file_read(disk_read_time_ms)
+                Thread(target=lambda:
+                        simulated_file_read(disk_read_time_ms)).start()
             else:
                 rc = STATUS_BAD_INPUT
 
@@ -70,7 +71,7 @@ def main(server_port):
         while True:
             sock, addr = server_socket.accept()
             receipt_timestamp = time.time()
-            Thread(target=lambda: handle_socket_request(sock, receipt_timestamp)).start()
+            eventlet.spawn(handle_socket_request, sock, receipt_timestamp)
     except KeyboardInterrupt:
         pass  # exit
 
