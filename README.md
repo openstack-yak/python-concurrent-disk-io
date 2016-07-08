@@ -1,7 +1,5 @@
 ## python-concurrent-disk-io
 
-Quickstart
-----------
 For python tests, make a virtualenv with the appropriate python
 (python2 for all but the curio tests;  python3.5+ for the curio test).
 Use the appropriate requirements file.
@@ -109,4 +107,37 @@ Implementations
 | simulated-disk-io-server.py        | Python 2.7    | **Y**    | CPython 2.7 and eventlet |
 | threaded-simulated-disk-io-server.py        | Python 2.7    | N    | CPython 2.7 and eventlet; corrected to use threaded disk I/O |
 | simulated-disk-io-server.rs        | Rust          | N        | Rust 1.9 |
+
+
+Notes
+-----
+
+Asynchronous solutions involve cooperative multitasking.
+When external libraries or devices block, it blocks whatever multitasking kernel or mechanism
+is coordinating the multitasking.
+
+The most straigthforward solution is to simply use threading.
+In fact, in the jython version here, the example was converted to
+a threading model since Python 2.7 has no async/await, and the eventlets
+code used in the CPython code is compiled code (e.g. not available
+in python 2.7 as native python bytecode).
+
+The motivation to move to something more lightweight than threads is
+performance.  Some languages take care of blocking I/O situations for
+you in the background.  In Python 3.5, this is in the control of the programmer.
+Simple async kernel library `curio` takes care of blocking for you at
+the library level by providing wrappers to otherwise non-async libraries,
+but other libraries or external calls must be explicitly handled by the
+programmer.
+
+The problem encountered (and the nature of the solution) is shown in this code.
+Some discussion should be added about strategies for debugging, and
+benchmarking performance, including CPU and RAM usage.
+
+A common and often quoted misnomer is that "it's the Python Global Interpreter
+Lock (GIL) at fault" - which is just that: a misnomer.
+We show the issue is one of asynchronous programming.
+
+Some guidelines for performant, reliable asynchronous programming
+will be suggested.
 
