@@ -77,13 +77,13 @@ clear and somewhat similar (across languages).
 
 Client
 ------
-The client utility used for testing is 'make_requests.py'.
+The client utility used for testing is 'make-http-requests.sh'. It's
+just a shell script that runs Apache Bench (ab).
 
 The Test
 --------
 1. Start the server implementation
-2. Run multiple request processes (at least 4 or 5)
-3. run 'python make_requests.py&', ensuring the shell sessions are running concurrently
+2. Run 'make-http-requests.sh' on same machine
 
 If the client requests experience timeout, then the problem scenario
 has manifested itself. If none of the concurrent client requests are
@@ -93,50 +93,20 @@ problem scenario is absent.
 Implementations
 ---------------
 
-| File                               | Language      | Problem? | Tool |
-| ----                               | --------      | -------- | ---------- |
-| SimulatedDiskIOServer.cs           | C#            | N        | Mono C# compiler version 4.2.1.0 |
-| SimulatedDiskIOServer.d            | D             | N        | DMD64 D Compiler v2.069.2-devel |
-| SimulatedDiskIOServer.java         | Java (JVM)    | N        | openjdk version 1.8.0 |
-| SimulatedDiskIOServer.nim          | Nim           | N        | Nim 0.14.2 |
-| SimulatedDiskIOServer.scala        | Scala (JVM)   | N        | Scala compiler version 2.11.8 |
-| jython-simulated-disk-io-server.py | Python (JVM)  | N        | Jython 2.7.0 |
-| simulated-disk-io-server.c         | C             | N        | gcc 4.8.5 |
-| simulated-disk-io-server.go        | Go            | N        | go version go1.2.1 linux/amd64 |
-| curio-simdisk-io-server.py         | Python 3.5    | N        | CPython 3.5 and curio |
-| simulated-disk-io-server.py        | Python 2.7    | **Y**    | CPython 2.7 and eventlet |
-| threaded-simulated-disk-io-server.py        | Python 2.7    | N    | CPython 2.7 and eventlet; corrected to use threaded disk I/O |
-| simulated-disk-io-server.rs        | Rust          | N        | Rust 1.9 |
-
-
-Notes
------
-
-Asynchronous solutions involve cooperative multitasking.
-When external libraries or devices block, it blocks whatever multitasking kernel or mechanism
-is coordinating the multitasking.
-
-The most straigthforward solution is to simply use threading.
-In fact, in the jython version here, the example was converted to
-a threading model since Python 2.7 has no async/await, and the eventlets
-code used in the CPython code is compiled code (e.g. not available
-in python 2.7 as native python bytecode).
-
-The motivation to move to something more lightweight than threads is
-performance.  Some languages take care of blocking I/O situations for
-you in the background.  In Python 3.5, this is in the control of the programmer.
-Simple async kernel library `curio` takes care of blocking for you at
-the library level by providing wrappers to otherwise non-async libraries,
-but other libraries or external calls must be explicitly handled by the
-programmer.
-
-The problem encountered (and the nature of the solution) is shown in this code.
-Some discussion should be added about strategies for debugging, and
-benchmarking performance, including CPU and RAM usage.
-
-A common and often quoted misnomer is that "it's the Python Global Interpreter
-Lock (GIL) at fault" - which is just that: a misnomer.
-We show the issue is one of asynchronous programming.
+| File                    | Language      | Problem? | Tool |
+| ----                    | --------      | -------- | ---------- |
+| HttpThreadsServer.cs    | C#            | N        | Mono C# compiler version 4.2.1.0 |
+| HttpThreadsServer.d     | D             | N        | DMD64 D Compiler v2.069.2-devel |
+| HttpThreadsServer.java  | Java (JVM)    | N        | openjdk version 1.8.0 |
+| HttpThreadsServer.nim   | Nim           | N        | Nim 0.14.2 |
+| HttpThreadsServer.pas   | Pascal        | N        | fpc 3.0 |
+| HttpThreadsServer.scala | Scala (JVM)   | N        | Scala compiler version 2.11.8 |
+| http-threads-server.py  | Python (JVM)  | N        | Jython 2.7.0 |
+| http-threads-server.py  | Python        | N        | CPython 2.7.6 |
+| http-threads-server.c   | C             | N        | gcc 4.8.5 |
+| http-server.go          | Go            | N        | go version go1.2.1 linux/amd64 |
+| http-eventlet-server.py | Python        | **Y**    | CPython 2.7 and eventlet |
+| http-threads-server.rs  | Rust          | N        | Rust 1.9 |
 
 Some guidelines for performant, reliable asynchronous programming
 will be suggested.
