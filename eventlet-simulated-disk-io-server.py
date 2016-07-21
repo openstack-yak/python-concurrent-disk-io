@@ -18,7 +18,7 @@ def simulated_file_read(elapsed_time_ms):
     time.sleep(elapsed_time_ms / 1000.0)  # seconds
 
 
-def handle_socket_request(sock, receipt_timestamp):
+def client_request(sock, receipt_timestamp):
     reader = sock.makefile('r')
     writer = sock.makefile('w')
     request_text = reader.readline()
@@ -33,7 +33,6 @@ def handle_socket_request(sock, receipt_timestamp):
 
         # has this request already timed out?
         if queue_time_secs >= READ_TIMEOUT_SECS:
-            print("timeout (queue)")
             rc = STATUS_QUEUE_TIMEOUT
         else:
             fields = string.split(request_text, ',')
@@ -60,16 +59,15 @@ def handle_socket_request(sock, receipt_timestamp):
 
 
 def main(server_port):
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('', server_port))
-    server_socket.listen(100)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('', server_port))
+    sock.listen(100)
     print("server listening on port %d" % server_port)
 
     try:
         while True:
-            sock, addr = server_socket.accept()
-            receipt_timestamp = time.time()
-            eventlet.spawn(handle_socket_request, sock, receipt_timestamp)
+            client, addr = sock.accept()
+            eventlet.spawn(client_request, client, time.time())
     except KeyboardInterrupt:
         pass  # exit
 

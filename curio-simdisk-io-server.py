@@ -21,7 +21,7 @@ def simulated_file_read(elapsed_time_ms):
     time.sleep(elapsed_time_ms / 1000.0)  # seconds
 
 
-async def client_request(client, addr, receipt_timestamp):
+async def client_request(client, receipt_timestamp):
     s = client.as_stream()
     request_text = await s.readline()
     if request_text:
@@ -35,7 +35,6 @@ async def client_request(client, addr, receipt_timestamp):
 
         # has this request already timed out?
         if queue_time_secs >= READ_TIMEOUT_SECS:
-            # print("timeout (queue)")
             rc = STATUS_QUEUE_TIMEOUT
         else:
             fields = request_text.split(b',')
@@ -68,7 +67,7 @@ async def main(server_port):
     try:
         while True:
             client, addr = await sock.accept()
-            await spawn(client_request(client, addr, time.time()))
+            await spawn(client_request(client, time.time()))
     except KeyboardInterrupt:
         pass  # exit
 
